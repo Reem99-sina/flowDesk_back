@@ -1,0 +1,5 @@
+ALTER TABLE organizations
+    ADD COLUMN email VARCHAR(255) NOT NULL;
+
+ALTER TABLE organizations
+ALTER COLUMN slug TYPE VARCHAR(100);
