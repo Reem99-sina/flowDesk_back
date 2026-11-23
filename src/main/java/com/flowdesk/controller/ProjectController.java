@@ -32,10 +32,11 @@ public class ProjectController {
             Authentication authentication
     ) {
         UserPrincipalDetails principal =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         return projectService.createProject(
                 principal.organizationId(),
+                principal.userId(),
                 request
         );
     }
@@ -45,7 +46,7 @@ public class ProjectController {
             Authentication authentication
     ) {
         UserPrincipalDetails principal =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         return projectService.getAllProjects(principal.organizationId());
     }
@@ -56,7 +57,7 @@ public class ProjectController {
             Authentication authentication
     ) {
         UserPrincipalDetails principal =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         return projectService.getProjectById(
                 id,
@@ -66,17 +67,19 @@ public class ProjectController {
 
 @PatchMapping("/{id}")
 @PreAuthorize("hasAnyRole('OWNER', 'ADMIN')")
+
 public ProjectResponse updateProject(
         @PathVariable Long id,
         @Valid @RequestBody UpdateProjectRequest request,
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+            (UserPrincipalDetails) authentication.getPrincipal();
 
     return projectService.updateProject(
             id,
             principal.organizationId(),
+            principal.userId(),
             request
     );
 }
@@ -89,11 +92,12 @@ public void deleteProject(
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+            (UserPrincipalDetails) authentication.getPrincipal();
 
     projectService.deleteProject(
             id,
-            principal.organizationId()
+            principal.organizationId(),
+            principal.userId()
     );
 }
 
@@ -106,7 +110,7 @@ public Page<ProjectResponse> searchProjects(
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+            (UserPrincipalDetails) authentication.getPrincipal();
 
     return projectService.searchProjects(
             principal.organizationId(),

@@ -1,6 +1,10 @@
 
 package com.flowdesk.security;
 
+import com.flowdesk.entity.User;
+import com.flowdesk.enums.OrganizationStatus;
+import com.flowdesk.enums.UserStatus;
+import com.flowdesk.repository.UserRepository;
 import com.flowdesk.service.JwtService;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -17,17 +21,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
-import com.flowdesk.entity.User;
-import com.flowdesk.enums.UserStatus;
-import com.flowdesk.enums.OrganizationStatus;
-import com.flowdesk.repository.UserRepository;
-
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return "OPTIONS".equalsIgnoreCase(request.getMethod());
+    }
 
     @Override
     protected void doFilterInternal(
@@ -46,46 +50,60 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         try {
+            if (jwtService.isTokenValid(token)) {
 
-if (jwtService.isTokenValid(token)) {
+                Long userId = jwtService.extractUserId(token);
+                Long organizationId =
+                        jwtService.extractOrganizationId(token);
 
-    Long userId = jwtService.extractUserId(token);
-    Long organizationId = jwtService.extractOrganizationId(token);
+                User user = userRepository
+                        .findByIdAndOrganization_Id(userId, organizationId)
+                        .orElse(null);
 
-    User user = userRepository
-            .findByIdAndOrganization_Id(userId, organizationId)
-            .orElse(null);
+                if (user == null
+                        || user.getStatus() != UserStatus.ACTIVE
+                        || user.getOrganization().getStatus()
+                                != OrganizationStatus.ACTIVE) {
 
-    if (user == null ||
-            user.getStatus() != UserStatus.ACTIVE ||
-            user.getOrganization().getStatus() != OrganizationStatus.ACTIVE) {
+                    SecurityContextHolder.clearContext();
 
-        SecurityContextHolder.clearContext();
+                } else {
 
-    } else {
+                    String email = user.getEmail();
+                    String role = user.getRole().name();
 
-        String email = user.getEmail();
-        String role = user.getRole().name();
+                    UserPrincipalDetails principal =
+                            new UserPrincipalDetails(
+                                    user.getId(),
+                                    user.getOrganization().getId()
+                            );
 
-        UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(
-                        email,
-                        null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                );
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    principal,
+                                    null,
+                                    List.of(
+                                            new SimpleGrantedAuthority(
+                                                    "ROLE_" + role
+                                            )
+                                    )
+                            );
 
-        authentication.setDetails(
-                new UserPrincipalDetails(
-                        user.getId(),
-                        user.getOrganization().getId()
-                )
-        );
+                    authentication.setDetails(email);
 
-        SecurityContextHolder.getContext()
-                .setAuthentication(authentication);
-    }
-}
+                    SecurityContextHolder.getContext()
+                            .setAuthentication(authentication);
 
+                    System.out.println(
+                            "JWT FILTER PRINCIPAL: " +
+                            SecurityContextHolder.getContext()
+                                    .getAuthentication()
+                                    .getPrincipal()
+                                    .getClass()
+                                    .getName()
+                    );
+                }
+            }
 
         } catch (JwtException | IllegalArgumentException exception) {
             SecurityContextHolder.clearContext();

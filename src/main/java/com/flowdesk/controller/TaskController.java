@@ -3,18 +3,24 @@ package com.flowdesk.controller;
 
 import com.flowdesk.dto.request.CreateTaskRequest;
 import com.flowdesk.dto.request.UpdateTaskRequest;
+import com.flowdesk.dto.request.UpdateTaskStatusRequest;
 import com.flowdesk.dto.response.TaskResponse;
+import com.flowdesk.enums.TaskStatus;
 import com.flowdesk.security.UserPrincipalDetails;
 import com.flowdesk.service.TaskService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.*;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import com.flowdesk.dto.request.UpdateTaskStatusRequest;
 
 import java.util.List;
 
@@ -27,14 +33,16 @@ public class TaskController {
 
     private Long getOrganizationId(Authentication authentication) {
         UserPrincipalDetails principal =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         return principal.organizationId();
     }
+
     private UserPrincipalDetails getPrincipal(Authentication authentication) {
-        return (UserPrincipalDetails) authentication.getDetails();
+        return (UserPrincipalDetails) authentication.getPrincipal();
     }
 
+    // Create Task
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN')")
     public ResponseEntity<TaskResponse> createTask(
@@ -43,24 +51,14 @@ public class TaskController {
     ) {
         TaskResponse response = taskService.createTask(
                 getPrincipal(authentication).organizationId(),
+                getPrincipal(authentication).userId(),
                 request
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @GetMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'AGENT')")
-    public ResponseEntity<List<TaskResponse>> getAllTasks(
-            Authentication authentication
-    ) {
-        return ResponseEntity.ok(
-                taskService.getAllTasks(
-                        getPrincipal(authentication).organizationId()
-                )
-        );
-    }
-
+    // Get Task By ID
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'AGENT')")
     public ResponseEntity<TaskResponse> getTaskById(
@@ -70,11 +68,12 @@ public class TaskController {
         return ResponseEntity.ok(
                 taskService.getTaskById(
                         id,
-                       getPrincipal(authentication).organizationId()
+                        getPrincipal(authentication).organizationId()
                 )
         );
     }
 
+    // Get Tasks By Project
     @GetMapping("/project/{projectId}")
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'AGENT')")
     public ResponseEntity<List<TaskResponse>> getTasksByProject(
@@ -89,6 +88,7 @@ public class TaskController {
         );
     }
 
+    // Update Task
     @PatchMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN')")
     public ResponseEntity<TaskResponse> updateTask(
@@ -100,11 +100,13 @@ public class TaskController {
                 taskService.updateTask(
                         id,
                         getPrincipal(authentication).organizationId(),
+                        getPrincipal(authentication).userId(),
                         request
                 )
         );
     }
 
+    // Delete Task
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN')")
     public ResponseEntity<Void> deleteTask(
@@ -118,6 +120,8 @@ public class TaskController {
 
         return ResponseEntity.noContent().build();
     }
+
+    // Get My Tasks
     @GetMapping("/my-tasks")
     @PreAuthorize("hasRole('AGENT')")
     public ResponseEntity<List<TaskResponse>> getMyTasks(
@@ -133,26 +137,53 @@ public class TaskController {
         );
     }
 
-@PatchMapping("/{id}/status")
-@PreAuthorize("hasRole('AGENT')")
-public ResponseEntity<TaskResponse> updateMyTaskStatus(
-        @PathVariable Long id,
-        @Valid @RequestBody UpdateTaskStatusRequest request,
-        Authentication authentication
-) {
-    UserPrincipalDetails principal = getPrincipal(authentication);
-    System.out.println("Agent User ID: " + principal.userId());
-    System.out.println("Organization ID: " + principal.organizationId());
-    System.out.println("Task ID: " + id);
+    // Update My Task Status
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('AGENT')")
+    public ResponseEntity<TaskResponse> updateMyTaskStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateTaskStatusRequest request,
+            Authentication authentication
+    ) {
+        UserPrincipalDetails principal = getPrincipal(authentication);
 
-    return ResponseEntity.ok(
-            taskService.updateMyTaskStatus(
-                    id,
-                    principal.userId(),
-                    principal.organizationId(),
-                    request.getStatus()
-            )
-    );
-}
+        System.out.println("Agent User ID: " + principal.userId());
+        System.out.println("Organization ID: " + principal.organizationId());
+        System.out.println("Task ID: " + id);
 
+        return ResponseEntity.ok(
+                taskService.updateMyTaskStatus(
+                        id,
+                        principal.userId(),
+                        principal.organizationId(),
+                        request.getStatus()
+                )
+        );
+    }
+
+    // Get Tasks With Search, Status Filter and Pagination
+    @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'AGENT')")
+    public ResponseEntity<Page<TaskResponse>> getTasks(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) TaskStatus status,
+            @PageableDefault(
+                    page = 0,
+                    size = 5,
+                    sort = "createdAt",
+                    direction = Sort.Direction.DESC
+            ) Pageable pageable,
+            Authentication authentication
+    ) {
+        Long organizationId = getOrganizationId(authentication);
+
+        return ResponseEntity.ok(
+                taskService.searchTasks(
+                        organizationId,
+                        search,
+                        status,
+                        pageable
+                )
+        );
+    }
 }

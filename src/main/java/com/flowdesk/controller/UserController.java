@@ -33,7 +33,7 @@ public class UserController {
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -45,6 +45,7 @@ public class UserController {
 
         UserResponse user = userService.createUser(
                 organizationId,
+                principalDetails.userId(),
                 request,
                 currentRole
         );
@@ -65,7 +66,7 @@ public class UserController {
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -87,7 +88,7 @@ public class UserController {
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -109,7 +110,7 @@ public class UserController {
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -145,7 +146,7 @@ public class UserController {
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+               (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -178,7 +179,7 @@ public class UserController {
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+               (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -211,7 +212,7 @@ public class UserController {
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -221,6 +222,27 @@ public class UserController {
                 true,
                 "Invitation resent successfully",
                 null
+        );
+
+        return ResponseEntity.ok(response);
+    }
+    @GetMapping("/active-agents")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getActiveAgents(
+            Authentication authentication
+    ) {
+        UserPrincipalDetails principalDetails =
+                (UserPrincipalDetails) authentication.getPrincipal();
+
+        Long organizationId = principalDetails.organizationId();
+
+        List<UserResponse> agents =
+                userService.getActiveAgents(organizationId);
+
+        ApiResponse<List<UserResponse>> response = new ApiResponse<>(
+                true,
+                "Active agents retrieved successfully",
+                agents
         );
 
         return ResponseEntity.ok(response);

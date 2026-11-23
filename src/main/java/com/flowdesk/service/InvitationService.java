@@ -15,6 +15,7 @@ import com.flowdesk.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
+import com.flowdesk.enums.ActivityType;
 
 @Service
 @RequiredArgsConstructor
@@ -25,11 +26,12 @@ public class InvitationService {
     private final EmailService emailService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ActivityService activityService;
 
     @Value("${app.frontend-url:http://localhost:3000}")
     private String frontendUrl;
 
-    public void sendInvitation(User user) {
+    public void sendInvitation(User user, User invitedBy) {
 
         String token = tokenService.generateToken();
 
@@ -37,6 +39,7 @@ public class InvitationService {
 
         Invitation invitation = new Invitation();
         invitation.setUser(user);
+        invitation.setInvitedBy(invitedBy);
         invitation.setTokenHash(tokenHash);
         invitation.setExpiresAt(
                 LocalDateTime.now().plusHours(24)
@@ -114,6 +117,15 @@ public class InvitationService {
         invitation.setUsedAt(LocalDateTime.now());
 
         invitationRepository.save(invitation);
+        activityService.createActivity(
+                invitation.getInvitedBy(),
+                user.getOrganization(),
+                ActivityType.TEAM_MEMBER_ADDED,
+                "added a new team member",
+                user.getFullName(),
+                "USER",
+                user.getId()
+        );
     }
     @Transactional
     public void resendInvitation(Long userId, Long organizationId) {
@@ -141,6 +153,10 @@ public class InvitationService {
 
         invitationRepository.saveAll(invitations);
 
-        sendInvitation(user);
+        Invitation latestInvitation = invitations.stream()
+                .max((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                .orElseThrow(() -> new IllegalArgumentException("Invitation not found"));
+
+        sendInvitation(user, latestInvitation.getInvitedBy());
     }
 }

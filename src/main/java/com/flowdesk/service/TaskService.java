@@ -8,7 +8,6 @@ import com.flowdesk.entity.Project;
 import com.flowdesk.entity.Task;
 import com.flowdesk.entity.User;
 import com.flowdesk.enums.TaskPriority;
-import com.flowdesk.enums.TaskStatus;
 import com.flowdesk.enums.UserStatus;
 import com.flowdesk.repository.OrganizationRepository;
 import com.flowdesk.repository.ProjectRepository;
@@ -17,9 +16,13 @@ import com.flowdesk.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import com.flowdesk.enums.ActivityType;
+import com.flowdesk.enums.TaskStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class TaskService {
     private final OrganizationRepository organizationRepository;
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
+    private final ActivityService activityService;
 
     private TaskResponse mapToResponse(Task task) {
         return TaskResponse.builder()
@@ -51,10 +55,26 @@ public class TaskService {
                 .priority(task.getPriority())
                 .startDate(task.getStartDate())
                 .dueDate(task.getDueDate())
+                .completedAt(task.getCompletedAt())
                 .createdAt(task.getCreatedAt())
                 .updatedAt(task.getUpdatedAt())
                 .build();
+
     }
+
+private void updateCompletionTimestamp(
+        Task task,
+        TaskStatus newStatus
+) {
+    if (newStatus == TaskStatus.DONE) {
+        if (task.getCompletedAt() == null) {
+            task.setCompletedAt(LocalDateTime.now());
+        }
+    } else {
+        task.setCompletedAt(null);
+    }
+}
+
 
     private Project getProject(Long projectId, Long organizationId) {
         return projectRepository
@@ -92,12 +112,18 @@ public class TaskService {
     @Transactional
     public TaskResponse createTask(
             Long organizationId,
+            Long userId,
             CreateTaskRequest request
     ) {
         Organization organization = organizationRepository
                 .findById(organizationId)
                 .orElseThrow(() ->
                         new IllegalArgumentException("Organization not found")
+                );
+        User createdBy = userRepository
+                .findByIdAndOrganization_Id(userId, organizationId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("User not found")
                 );
 
         Project project = getProject(
@@ -120,10 +146,14 @@ public class TaskService {
         task.setDescription(request.getDescription());
 
         task.setStatus(
-                request.getStatus() != null
-                        ? request.getStatus()
-                        : TaskStatus.TODO
+            request.getStatus() != null
+                ? request.getStatus()
+                : TaskStatus.TODO
         );
+
+        if (task.getStatus() == TaskStatus.DONE) {
+            task.setCompletedAt(LocalDateTime.now());
+        }
 
         task.setPriority(
                 request.getPriority() != null
@@ -135,6 +165,15 @@ public class TaskService {
         task.setDueDate(request.getDueDate());
 
         Task savedTask = taskRepository.save(task);
+        activityService.createActivity(
+                createdBy,
+                organization,
+                ActivityType.TASK_CREATED,
+                "created a new task",
+                savedTask.getTitle(),
+                "TASK",
+                savedTask.getId()
+        );
 
         return mapToResponse(savedTask);
     }
@@ -183,14 +222,21 @@ public class TaskService {
 public TaskResponse updateTask(
         Long taskId,
         Long organizationId,
+        Long userId,
         UpdateTaskRequest request
-) {
+){
     Task task = taskRepository
             .findByIdAndOrganization_Id(taskId, organizationId)
             .orElseThrow(() ->
                     new IllegalArgumentException("Task not found")
             );
+    TaskStatus oldStatus = task.getStatus();
 
+    User updatedBy = userRepository
+            .findByIdAndOrganization_Id(userId, organizationId)
+            .orElseThrow(() ->
+                    new IllegalArgumentException("User not found")
+            );
     if (request.getTitle() != null) {
         if (request.getTitle().isBlank()) {
             throw new IllegalArgumentException(
@@ -220,9 +266,11 @@ public TaskResponse updateTask(
         task.setAssignedTo(user);
     }
 
-    if (request.getStatus() != null) {
-        task.setStatus(request.getStatus());
-    }
+
+     if (request.getStatus() != null) {
+            updateCompletionTimestamp(task, request.getStatus());
+            task.setStatus(request.getStatus());
+     }
 
     if (request.getPriority() != null) {
         task.setPriority(request.getPriority());
@@ -239,6 +287,29 @@ public TaskResponse updateTask(
     validateDates(task.getStartDate(), task.getDueDate());
 
     Task updatedTask = taskRepository.save(task);
+    if (request.getStatus() != null &&
+            oldStatus != request.getStatus()) {
+
+        ActivityType activityType =
+                request.getStatus() == TaskStatus.DONE
+                        ? ActivityType.TASK_COMPLETED
+                        : ActivityType.TASK_STATUS_UPDATED;
+
+        String description =
+                request.getStatus() == TaskStatus.DONE
+                        ? "completed a task"
+                        : "updated task status";
+
+        activityService.createActivity(
+                updatedBy,
+                updatedTask.getOrganization(),
+                activityType,
+                description,
+                updatedTask.getTitle(),
+                "TASK",
+                updatedTask.getId()
+        );
+    }
 
     return mapToResponse(updatedTask);
 }
@@ -286,12 +357,56 @@ public TaskResponse updateMyTaskStatus(
                             "Task not found or not assigned to you"
                     )
             );
+    TaskStatus oldStatus = task.getStatus();
 
+    User updatedBy = userRepository
+            .findByIdAndOrganization_Id(userId, organizationId)
+            .orElseThrow(() ->
+                    new IllegalArgumentException("User not found")
+            );
+
+    updateCompletionTimestamp(task, status);
     task.setStatus(status);
 
     Task updatedTask = taskRepository.save(task);
+    if (oldStatus != status) {
+
+        ActivityType activityType =
+                status == TaskStatus.DONE
+                        ? ActivityType.TASK_COMPLETED
+                        : ActivityType.TASK_STATUS_UPDATED;
+
+        String description =
+                status == TaskStatus.DONE
+                        ? "completed a task"
+                        : "updated task status";
+
+        activityService.createActivity(
+                updatedBy,
+                updatedTask.getOrganization(),
+                activityType,
+                description,
+                updatedTask.getTitle(),
+                "TASK",
+                updatedTask.getId()
+        );
+    }
 
     return mapToResponse(updatedTask);
 }
+@Transactional(readOnly = true)
+public Page<TaskResponse> searchTasks(
+        Long organizationId,
+        String search,
+        TaskStatus status,
+        Pageable pageable
+) {
+    String searchValue = (search == null || search.isBlank())
+            ? ""
+            : search.trim();
 
+    return taskRepository
+            .searchTasks(organizationId, searchValue, status, pageable)
+            .map(this::mapToResponse);
+}
 }

@@ -28,9 +28,10 @@ public class UserService {
     private final InvitationService invitationService;
     public UserResponse createUser(
             Long organizationId,
+            Long currentUserId,
             CreateUserRequest request,
             String currentRole
-    ) {
+    ){
         if (currentRole.equals("ADMIN")
                 && request.getRole() != UserRole.AGENT) {
             throw new AccessDeniedException(
@@ -70,7 +71,11 @@ public class UserService {
         user.setStatus(UserStatus.INVITED);
 
         user = userRepository.save(user);
-        invitationService.sendInvitation(user);
+        User invitedBy = userRepository
+                .findByIdAndOrganization_Id(currentUserId, organizationId)
+                .orElseThrow(() -> new IllegalArgumentException("Inviting user not found"));
+
+        invitationService.sendInvitation(user, invitedBy);
 
         return new UserResponse(
                 user.getId(),
@@ -225,6 +230,41 @@ public void deleteUser(
 
     userRepository.delete(user);
 }
+@Transactional(readOnly = true)
+public List<UserResponse> getActiveAgents(Long organizationId) {
 
+    System.out.println("========== ACTIVE AGENTS ==========");
+    System.out.println("Organization ID: " + organizationId);
+
+    List<User> agents = userRepository
+            .findAllByOrganization_IdAndRoleAndStatus(
+                    organizationId,
+                    UserRole.AGENT,
+                    UserStatus.ACTIVE
+            );
+
+    System.out.println("Agents count: " + agents.size());
+
+    agents.forEach(agent ->
+            System.out.println(
+                    agent.getId() + " | " +
+                    agent.getFullName() + " | " +
+                    agent.getRole() + " | " +
+                    agent.getStatus()
+            )
+    );
+
+    System.out.println("===================================");
+
+    return agents.stream()
+            .map(user -> new UserResponse(
+                    user.getId(),
+                    user.getFullName(),
+                    user.getEmail(),
+                    user.getRole(),
+                    user.getStatus()
+            ))
+            .toList();
+}
 
 }

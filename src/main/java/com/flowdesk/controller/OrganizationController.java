@@ -30,7 +30,7 @@ public class OrganizationController {
     public ResponseEntity<ApiResponse<OrganizationResponse>> getCurrentOrganization(
             Authentication authentication) {
 UserPrincipalDetails principalDetails =
-        (UserPrincipalDetails) authentication.getDetails();
+       (UserPrincipalDetails) authentication.getPrincipal();
 
 Long organizationId = principalDetails.organizationId();
 
@@ -48,7 +48,7 @@ Long organizationId = principalDetails.organizationId();
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long currentOrganizationId = principalDetails.organizationId();
 
@@ -73,7 +73,7 @@ Long organizationId = principalDetails.organizationId();
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 
@@ -97,7 +97,7 @@ Long organizationId = principalDetails.organizationId();
             Authentication authentication
     ) {
         UserPrincipalDetails principalDetails =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         Long organizationId = principalDetails.organizationId();
 

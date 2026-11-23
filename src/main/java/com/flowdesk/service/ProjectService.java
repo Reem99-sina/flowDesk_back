@@ -18,6 +18,9 @@ import java.util.List;
 import java.time.LocalDate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import com.flowdesk.entity.User;
+import com.flowdesk.enums.ActivityType;
+import com.flowdesk.repository.UserRepository;
 
 
 @Service
@@ -27,6 +30,9 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final OrganizationRepository organizationRepository;
     private final CustomerRepository customerRepository;
+    private final UserRepository userRepository;
+    private final ActivityService activityService;
+
     private ProjectResponse mapToResponse(Project project) {
         return ProjectResponse.builder()
                 .id(project.getId())
@@ -52,10 +58,17 @@ public class ProjectService {
     }
 
     @Transactional
-    public ProjectResponse createProject(Long organizationId, CreateProjectRequest request) {
+    public ProjectResponse createProject(
+            Long organizationId,
+            Long userId,
+            CreateProjectRequest request
+    ) {
 
         Organization organization = organizationRepository.findById(organizationId)
                 .orElseThrow(() -> new IllegalArgumentException("Organization not found"));
+        User user = userRepository
+                .findByIdAndOrganization_Id(userId, organizationId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         Customer customer = null;
 
@@ -87,6 +100,15 @@ public class ProjectService {
         project.setBudget(request.getBudget());
 
         Project savedProject = projectRepository.save(project);
+        activityService.createActivity(
+                user,
+                organization,
+                ActivityType.PROJECT_CREATED,
+                "created a new project",
+                savedProject.getName(),
+                "PROJECT",
+                savedProject.getId()
+        );
 
         return mapToResponse(savedProject);
     }
@@ -112,11 +134,15 @@ public class ProjectService {
 public ProjectResponse updateProject(
         Long projectId,
         Long organizationId,
+        Long userId,
         UpdateProjectRequest request
 ) {
     Project project = projectRepository
             .findByIdAndOrganization_Id(projectId, organizationId)
             .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    User user = userRepository
+            .findByIdAndOrganization_Id(userId, organizationId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
     if (request.getName() != null) {
         if (request.getName().isBlank()) {
@@ -171,11 +197,27 @@ public ProjectResponse updateProject(
     return mapToResponse(updatedProject);
 }
 @Transactional
-public void deleteProject(Long projectId, Long organizationId) {
+public void deleteProject(
+        Long projectId,
+        Long organizationId,
+        Long userId
+) {
 
     Project project = projectRepository
             .findByIdAndOrganization_Id(projectId, organizationId)
             .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+    User user = userRepository
+            .findByIdAndOrganization_Id(userId, organizationId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    activityService.createActivity(
+            user,
+            project.getOrganization(),
+            ActivityType.PROJECT_DELETED,
+            "deleted a project",
+            project.getName(),
+            "PROJECT",
+            project.getId()
+    );
 
     projectRepository.delete(project);
 }

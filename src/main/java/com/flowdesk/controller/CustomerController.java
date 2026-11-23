@@ -33,7 +33,7 @@ public class CustomerController {
             Authentication authentication
     ) {
         UserPrincipalDetails principal =
-                (UserPrincipalDetails) authentication.getDetails();
+                (UserPrincipalDetails) authentication.getPrincipal();
 
         return customerService.createCustomer(
                 principal.organizationId(),
@@ -47,7 +47,7 @@ public List<CustomerResponse> getAllCustomers(
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+           (UserPrincipalDetails) authentication.getPrincipal();
 
     return customerService.getAllCustomers(
             principal.organizationId()
@@ -61,7 +61,7 @@ public CustomerResponse getCustomerById(
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+           (UserPrincipalDetails) authentication.getPrincipal();
 
     return customerService.getCustomerById(
             id,
@@ -77,7 +77,7 @@ public CustomerResponse updateCustomer(
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+           (UserPrincipalDetails) authentication.getPrincipal();
 
     return customerService.updateCustomer(
             id,
@@ -94,7 +94,7 @@ public void deleteCustomer(
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+           (UserPrincipalDetails) authentication.getPrincipal();
 
     customerService.deleteCustomer(
             id,
@@ -110,7 +110,7 @@ public Page<CustomerResponse> searchCustomers(
         Authentication authentication
 ) {
     UserPrincipalDetails principal =
-            (UserPrincipalDetails) authentication.getDetails();
+           (UserPrincipalDetails) authentication.getPrincipal();
 
     return customerService.searchCustomers(
             principal.organizationId(),
