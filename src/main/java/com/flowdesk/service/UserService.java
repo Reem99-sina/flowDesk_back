@@ -17,6 +17,9 @@ import java.util.List;
 import org.springframework.transaction.annotation.Transactional;
 import com.flowdesk.dto.auth.UpdateUserRequest;
 import com.flowdesk.dto.auth.UserStatusUpdateRequest;
+import com.flowdesk.dto.auth.ChangePasswordRequest;
+import com.flowdesk.dto.user.NotificationPreferencesRequest;
+import com.flowdesk.dto.user.NotificationPreferencesResponse;
 
 @Service
 @RequiredArgsConstructor
@@ -199,7 +202,38 @@ public class UserService {
                 user.getStatus()
         );
     }
+@Transactional
+public void changePassword(
+        Long userId,
+        Long organizationId,
+        ChangePasswordRequest request
+) {
+    User user = userRepository
+            .findByIdAndOrganization_Id(userId, organizationId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+    if (!passwordEncoder.matches(
+            request.getCurrentPassword(),
+            user.getPassword()
+    )) {
+        throw new IllegalArgumentException("Current password is incorrect");
+    }
+
+    if (passwordEncoder.matches(
+            request.getNewPassword(),
+            user.getPassword()
+    )) {
+        throw new IllegalArgumentException(
+                "New password must be different from current password"
+        );
+    }
+
+    user.setPassword(
+            passwordEncoder.encode(request.getNewPassword())
+    );
+
+    userRepository.save(user);
+}
 
 @Transactional
 public void deleteUser(
@@ -265,6 +299,48 @@ public List<UserResponse> getActiveAgents(Long organizationId) {
                     user.getStatus()
             ))
             .toList();
+}
+
+@Transactional(readOnly = true)
+public NotificationPreferencesResponse getNotificationPreferences(
+        Long userId,
+        Long organizationId
+) {
+    User user = userRepository
+            .findByIdAndOrganization_Id(userId, organizationId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+    return new NotificationPreferencesResponse(
+            user.getEmailNotifications(),
+            user.getTaskAssignmentNotifications(),
+            user.getTaskUpdateNotifications(),
+            user.getDeadlineReminderNotifications()
+    );
+}
+
+@Transactional
+public NotificationPreferencesResponse updateNotificationPreferences(
+        Long userId,
+        Long organizationId,
+        NotificationPreferencesRequest request
+) {
+    User user = userRepository
+            .findByIdAndOrganization_Id(userId, organizationId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+    user.setEmailNotifications(request.getEmailNotifications());
+    user.setTaskAssignmentNotifications(request.getTaskAssignmentNotifications());
+    user.setTaskUpdateNotifications(request.getTaskUpdateNotifications());
+    user.setDeadlineReminderNotifications(request.getDeadlineReminderNotifications());
+
+    user = userRepository.save(user);
+
+    return new NotificationPreferencesResponse(
+            user.getEmailNotifications(),
+            user.getTaskAssignmentNotifications(),
+            user.getTaskUpdateNotifications(),
+            user.getDeadlineReminderNotifications()
+    );
 }
 
 }

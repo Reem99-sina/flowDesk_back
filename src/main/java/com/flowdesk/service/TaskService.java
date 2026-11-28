@@ -1,5 +1,5 @@
 package com.flowdesk.service;
-
+import java.util.Objects;
 import com.flowdesk.dto.request.CreateTaskRequest;
 import com.flowdesk.dto.request.UpdateTaskRequest;
 import com.flowdesk.dto.response.TaskResponse;
@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import com.flowdesk.enums.ActivityType;
 import com.flowdesk.enums.TaskStatus;
+import com.flowdesk.dto.response.DashboardSummaryResponse;
+
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +35,7 @@ public class TaskService {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
     private final ActivityService activityService;
+    private final NotificationService notificationService;
 
     private TaskResponse mapToResponse(Task task) {
         return TaskResponse.builder()
@@ -165,6 +168,13 @@ private void updateCompletionTimestamp(
         task.setDueDate(request.getDueDate());
 
         Task savedTask = taskRepository.save(task);
+
+        if (assignedUser != null) {
+            notificationService.createTaskAssignmentNotification(
+                    assignedUser,
+                    savedTask.getTitle()
+            );
+        }
         activityService.createActivity(
                 createdBy,
                 organization,
@@ -190,13 +200,31 @@ private void updateCompletionTimestamp(
     @Transactional(readOnly = true)
     public TaskResponse getTaskById(
             Long taskId,
-            Long organizationId
+            Long organizationId,
+            Long userId,
+            boolean isAgent
     ) {
-        Task task = taskRepository
-                .findByIdAndOrganization_Id(taskId, organizationId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException("Task not found")
-                );
+        Task task;
+
+        if (isAgent) {
+            task = taskRepository
+                    .findByIdAndAssignedTo_IdAndOrganization_Id(
+                            taskId,
+                            userId,
+                            organizationId
+                    )
+                    .orElseThrow(() ->
+                            new IllegalArgumentException(
+                                    "Task not found or not assigned to you"
+                            )
+                    );
+        } else {
+            task = taskRepository
+                    .findByIdAndOrganization_Id(taskId, organizationId)
+                    .orElseThrow(() ->
+                            new IllegalArgumentException("Task not found")
+                    );
+        }
 
         return mapToResponse(task);
     }
@@ -204,19 +232,36 @@ private void updateCompletionTimestamp(
     @Transactional(readOnly = true)
     public List<TaskResponse> getTasksByProject(
             Long projectId,
-            Long organizationId
+            Long organizationId,
+            Long userId,
+            boolean isAgent
     ) {
         getProject(projectId, organizationId);
 
-        return taskRepository
-                .findAllByProject_IdAndOrganization_Id(
-                        projectId,
-                        organizationId
-                )
-                .stream()
+        List<Task> tasks;
+
+        if (isAgent) {
+            tasks = taskRepository
+                    .findAllByProject_IdAndOrganization_Id(projectId, organizationId)
+                    .stream()
+                    .filter(task ->
+                            task.getAssignedTo() != null &&
+                            task.getAssignedTo().getId().equals(userId)
+                    )
+                    .toList();
+        } else {
+            tasks = taskRepository
+                    .findAllByProject_IdAndOrganization_Id(
+                            projectId,
+                            organizationId
+                    );
+        }
+
+        return tasks.stream()
                 .map(this::mapToResponse)
                 .toList();
     }
+
 
 @Transactional
 public TaskResponse updateTask(
@@ -224,69 +269,135 @@ public TaskResponse updateTask(
         Long organizationId,
         Long userId,
         UpdateTaskRequest request
-){
+) {
     Task task = taskRepository
             .findByIdAndOrganization_Id(taskId, organizationId)
             .orElseThrow(() ->
                     new IllegalArgumentException("Task not found")
             );
+
     TaskStatus oldStatus = task.getStatus();
+
+    Long previousAssignedUserId = task.getAssignedTo() != null
+            ? task.getAssignedTo().getId()
+            : null;
 
     User updatedBy = userRepository
             .findByIdAndOrganization_Id(userId, organizationId)
             .orElseThrow(() ->
                     new IllegalArgumentException("User not found")
             );
+
+    boolean taskChanged = false;
+    boolean assignmentChanged = false;
+
     if (request.getTitle() != null) {
         if (request.getTitle().isBlank()) {
             throw new IllegalArgumentException(
                     "Task title cannot be blank"
             );
         }
-        task.setTitle(request.getTitle());
+
+        if (!Objects.equals(task.getTitle(), request.getTitle())) {
+            task.setTitle(request.getTitle());
+            taskChanged = true;
+        }
     }
 
     if (request.getDescription() != null) {
-        task.setDescription(request.getDescription());
+        if (!Objects.equals(task.getDescription(), request.getDescription())) {
+            task.setDescription(request.getDescription());
+            taskChanged = true;
+        }
     }
 
     if (request.getProjectId() != null) {
-        Project project = getProject(
-                request.getProjectId(),
-                organizationId
-        );
-        task.setProject(project);
+        if (!task.getProject().getId().equals(request.getProjectId())) {
+            Project project = getProject(
+                    request.getProjectId(),
+                    organizationId
+            );
+
+            task.setProject(project);
+            taskChanged = true;
+        }
     }
 
     if (request.getAssignedTo() != null) {
-        User user = getAssignedUser(
-                request.getAssignedTo(),
-                organizationId
-        );
-        task.setAssignedTo(user);
+        if (!request.getAssignedTo().equals(previousAssignedUserId)) {
+            User user = getAssignedUser(
+                    request.getAssignedTo(),
+                    organizationId
+            );
+
+            task.setAssignedTo(user);
+            taskChanged = true;
+            assignmentChanged = true;
+        }
     }
 
-
-     if (request.getStatus() != null) {
+    if (request.getStatus() != null) {
+        if (task.getStatus() != request.getStatus()) {
             updateCompletionTimestamp(task, request.getStatus());
             task.setStatus(request.getStatus());
-     }
+            taskChanged = true;
+        }
+    }
 
     if (request.getPriority() != null) {
-        task.setPriority(request.getPriority());
+        if (task.getPriority() != request.getPriority()) {
+            task.setPriority(request.getPriority());
+            taskChanged = true;
+        }
     }
 
     if (request.getStartDate() != null) {
-        task.setStartDate(request.getStartDate());
+        if (!Objects.equals(task.getStartDate(), request.getStartDate())) {
+            task.setStartDate(request.getStartDate());
+            taskChanged = true;
+        }
     }
 
-    if (request.getDueDate() != null) {
+    if (request.getDueDate() != null &&
+            !Objects.equals(task.getDueDate(), request.getDueDate())) {
+
         task.setDueDate(request.getDueDate());
+
+        task.setDeadlineReminderSent(false);
+        task.setDeadlineReminderSentFor(null);
+
+        taskChanged = true;
     }
 
     validateDates(task.getStartDate(), task.getDueDate());
 
     Task updatedTask = taskRepository.save(task);
+
+    User newAssignedUser = updatedTask.getAssignedTo();
+
+    // Notify the new assignee when the task is reassigned
+    if (newAssignedUser != null &&
+            !newAssignedUser.getId().equals(previousAssignedUserId)) {
+
+        notificationService.createTaskAssignmentNotification(
+                newAssignedUser,
+                updatedTask.getTitle()
+        );
+    }
+
+    // Notify the current assignee about other task updates
+    // Do not send a duplicate notification after reassignment
+    if (taskChanged &&
+            !assignmentChanged &&
+            newAssignedUser != null) {
+
+        notificationService.createTaskUpdateNotification(
+                newAssignedUser,
+                updatedBy,
+                updatedTask.getTitle()
+        );
+    }
+
     if (request.getStatus() != null &&
             oldStatus != request.getStatus()) {
 
@@ -313,6 +424,7 @@ public TaskResponse updateTask(
 
     return mapToResponse(updatedTask);
 }
+
 @Transactional
 public void deleteTask(Long taskId, Long organizationId) {
 
@@ -394,9 +506,11 @@ public TaskResponse updateMyTaskStatus(
 
     return mapToResponse(updatedTask);
 }
+
 @Transactional(readOnly = true)
 public Page<TaskResponse> searchTasks(
         Long organizationId,
+        Long assignedToId,
         String search,
         TaskStatus status,
         Pageable pageable
@@ -406,7 +520,40 @@ public Page<TaskResponse> searchTasks(
             : search.trim();
 
     return taskRepository
-            .searchTasks(organizationId, searchValue, status, pageable)
+            .searchTasks(
+                    organizationId,
+                    assignedToId,
+                    searchValue,
+                    status,
+                    pageable
+            )
             .map(this::mapToResponse);
+}
+@Transactional(readOnly = true)
+public DashboardSummaryResponse getTaskStatistics(
+        Long organizationId,
+        Long assignedToId
+) {
+    List<Object[]> rows = taskRepository.getTaskStatistics(
+            organizationId,
+            assignedToId,
+            LocalDate.now()
+    );
+
+    Object[] result = rows.isEmpty()
+            ? new Object[]{0L, 0L, 0L, 0L, 0L}
+            : rows.get(0);
+
+    return DashboardSummaryResponse.builder()
+            .totalTasks(toLong(result[0]))
+            .completedTasks(toLong(result[1]))
+            .pendingTasks(toLong(result[2]))
+            .todaysTasks(toLong(result[3]))
+            .overdueTasks(toLong(result[4]))
+            .build();
+}
+
+private Long toLong(Object value) {
+    return value == null ? 0L : ((Number) value).longValue();
 }
 }

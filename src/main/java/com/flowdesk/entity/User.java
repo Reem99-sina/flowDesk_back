@@ -62,6 +62,18 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "email_notifications", nullable = false)
+    private Boolean emailNotifications = true;
+
+    @Column(name = "task_assignment_notifications", nullable = false)
+    private Boolean taskAssignmentNotifications = true;
+
+    @Column(name = "task_update_notifications", nullable = false)
+    private Boolean taskUpdateNotifications = true;
+
+    @Column(name = "deadline_reminder_notifications", nullable = false)
+    private Boolean deadlineReminderNotifications = true;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

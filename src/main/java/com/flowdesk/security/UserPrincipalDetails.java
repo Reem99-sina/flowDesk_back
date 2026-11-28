@@ -1,7 +1,10 @@
 package com.flowdesk.security;
 
+import com.flowdesk.enums.UserRole;
+
 public record UserPrincipalDetails(
         Long userId,
-        Long organizationId
+        Long organizationId,
+        UserRole role
 ) {
 }

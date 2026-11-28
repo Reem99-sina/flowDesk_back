@@ -61,6 +61,12 @@ public class Task {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "deadline_reminder_sent", nullable = false)
+    private Boolean deadlineReminderSent = false;
+
+    @Column(name = "deadline_reminder_sent_for")
+    private LocalDate deadlineReminderSentFor;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

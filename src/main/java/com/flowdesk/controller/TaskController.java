@@ -65,10 +65,16 @@ public class TaskController {
             @PathVariable Long id,
             Authentication authentication
     ) {
+        UserPrincipalDetails principal = getPrincipal(authentication);
+
+        boolean isAgent = principal.role().name().equals("AGENT");
+
         return ResponseEntity.ok(
                 taskService.getTaskById(
                         id,
-                        getPrincipal(authentication).organizationId()
+                        principal.organizationId(),
+                        principal.userId(),
+                        isAgent
                 )
         );
     }
@@ -80,10 +86,16 @@ public class TaskController {
             @PathVariable Long projectId,
             Authentication authentication
     ) {
+        UserPrincipalDetails principal = getPrincipal(authentication);
+
+        boolean isAgent = principal.role().name().equals("AGENT");
+
         return ResponseEntity.ok(
                 taskService.getTasksByProject(
                         projectId,
-                        getPrincipal(authentication).organizationId()
+                        principal.organizationId(),
+                        principal.userId(),
+                        isAgent
                 )
         );
     }
@@ -175,11 +187,16 @@ public class TaskController {
             ) Pageable pageable,
             Authentication authentication
     ) {
-        Long organizationId = getOrganizationId(authentication);
+        UserPrincipalDetails principal = getPrincipal(authentication);
+
+        Long assignedToId = principal.role().name().equals("AGENT")
+                ? principal.userId()
+                : null;
 
         return ResponseEntity.ok(
                 taskService.searchTasks(
-                        organizationId,
+                        principal.organizationId(),
+                        assignedToId,
                         search,
                         status,
                         pageable

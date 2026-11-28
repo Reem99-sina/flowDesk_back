@@ -37,6 +37,7 @@ public class CustomerService {
             );
         }
 
+
         Organization organization = organizationRepository
                 .findById(organizationId)
                 .orElseThrow(() -> new IllegalArgumentException(

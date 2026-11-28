@@ -182,8 +182,8 @@ Example using PowerShell:
 
 ```powershell
 $env:JWT_SECRET="YOUR_SECURE_JWT_SECRET"
-$env:MAIL_USERNAME="YOUR_EMAIL"
-$env:MAIL_PASSWORD="YOUR_APP_PASSWORD"
+$env:MAIL_USERNAME="reemsina2@gmail.com"
+$env:MAIL_PASSWORD="rqzt xvzz lptn gbwi"
 
 $env:DB_USERNAME="flowdesk"
 $env:DB_PASSWORD="YOUR_DATABASE_PASSWORD"
